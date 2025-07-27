@@ -1,6 +1,7 @@
 
 function out_img = ct2mrireg(ct_img,mr_img,out_img, hires)
 
+mr_img_mask = [mr_img(1:end-6),'mask.nii.gz'];
 if ~exist('hires','var')
     hires=1;
 end
@@ -19,6 +20,7 @@ mkdir(workDir);
 
 if hires~=0
     mr_img_hires = fullfile(workdir, ['hires_mr.nii.gz']);
+    mr_img_mask_hires = fullfile(workdir, ['hires_mr.mask.nii.gz']);
     vct=load_untouch_nii_gz(ct_img);
     % vct.hdr.dime.pixdim(2:4)
     % % Make the header look like BrainSuite header
@@ -29,8 +31,17 @@ if hires~=0
     v.hdr.dime.scl_slope = 0;
     save_untouch_nii(v,mr_img_hires);
     
+    vm=load_untouch_nii_gz(mr_img_mask);
+    vm.hdr.hist.srow_x(1:3)=[vm.hdr.dime.pixdim(2),0,0];
+    vm.hdr.hist.srow_y(1:3)=[0,vm.hdr.dime.pixdim(3),0];
+    vm.hdr.hist.srow_z(1:3)=[0,0,vm.hdr.dime.pixdim(4)];
+    vm.hdr.dime.scl_slope = 0;
+    save_untouch_nii(vm,mr_img_mask_hires);
+
     %Generate high resolution MR so that output is hi res
     svreg_resample(mr_img_hires, mr_img_hires, '-res', vct.hdr.dime.pixdim(2), vct.hdr.dime.pixdim(3), vct.hdr.dime.pixdim(4));
+    svreg_resample(mr_img_mask_hires, mr_img_mask_hires, '-res', vct.hdr.dime.pixdim(2), vct.hdr.dime.pixdim(3), vct.hdr.dime.pixdim(4),'nearest');
+
     mr_img=mr_img_hires;
     
 end
@@ -46,6 +57,7 @@ catch
     v.hdr.hist.srow_y(1:3)=[0,v.hdr.dime.pixdim(3),0];
     v.hdr.hist.srow_z(1:3)=[0,0,v.hdr.dime.pixdim(4)];
     v.hdr.dime.scl_slope = 0;
+    %v.img(v.img ==0) = -1000; % values that were set to be 0 during defacing, set them to -1000, the value of background in CT
     save_untouch_nii(v,temp_moving);
 end
 
@@ -71,10 +83,13 @@ mr_img=temp_ref;
 opts = struct(...
     'dof', 6, ...
     'pngout', false,   ...
-    'nthreads', 2     ... Number of (possible) parallel threads to use
-    );
+    'nthreads', 2)%,     ... Number of (possible) parallel threads to use
+    %'init_opts', struct('init_method', 'search', 'search_range',[40 40 40], ...
+    %                   'search_delta',[10 10 10], 'search_imres',5) ...
+    %                   );
 
 opts.similarity='cr';
+opts.static_mask=mr_img_mask_hires;
 %warning('off', 'MATLAB:maxNumCompThreads:Deprecated');
 [M_world, ref_loc] = register_files_affine(ct_img, mr_img, out_img, opts);
 %warning('on', 'MATLAB:maxNumCompThreads:Deprecated');
