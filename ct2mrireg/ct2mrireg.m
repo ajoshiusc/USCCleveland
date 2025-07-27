@@ -2,6 +2,11 @@
 function out_img = ct2mrireg(ct_img,mr_img,out_img, hires)
 
 mr_img_mask = [mr_img(1:end-6),'mask.nii.gz'];
+if ~exist(mr_img_mask,'file')
+    error('%s: does not exist!!\n Please generate it using BSE from BrainSuite and then continue.\n',mr_img_mask);
+    
+end
+
 if ~exist('hires','var')
     hires=1;
 end

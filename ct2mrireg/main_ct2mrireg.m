@@ -17,16 +17,6 @@ out_img = '/home/ajoshi/Downloads/ct2mri_fail_data/CT2MRI.nii.gz';
 %out_img = '/home/ajoshi/Desktop/ucdata/UG_data/MRI/11_c_Ax_T1_Stealth_Bravo_ALL_8_BRAIN_ADULT_20230114123955_11_ct.nii.gz';
 % Register CT (moving) to MR (fixed)
 
-
-if 0%length(ct.img(:)==0)>1000
-    ct = load_untouch_nii_gz(ct_img);
-    fprintf('Defacing has been applied to CT, probably incorrectly\n fixing...');
-    ct.img(ct.img<0) = 0;
-    save_untouch_nii_gz(ct,[ct_img(1:end-6),'fixed.nii.gz']);
-    ct_img = [ct_img(1:end-6),'fixed.nii.gz'];
-
-end
-
 a=tic;
 ct2mrireg(ct_img, mr_img, out_img);
 toc(a)
