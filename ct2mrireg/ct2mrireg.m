@@ -93,7 +93,7 @@ opts = struct(...
     %                   'search_delta',[10 10 10], 'search_imres',5) ...
     %                   );
 
-opts.similarity='cr';
+opts.similarity='mi';
 opts.static_mask=mr_img_mask_hires;
 %warning('off', 'MATLAB:maxNumCompThreads:Deprecated');
 [M_world, ref_loc] = register_files_affine(ct_img, mr_img, out_img, opts);
