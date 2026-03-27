@@ -182,32 +182,24 @@ def plot_atlas_pyvista(atlas_name, space,
     # Note: Using scalars="labels" with cell data ensures each face has a solid color.
     mesh_args = dict(scalars="labels", cmap=cmap, show_scalar_bar=False, smooth_shading=True, clim=[0, n_parcels], preference="cell")
     
-    # 1. LH Lateral
-    plotter.subplot(0, 0)
-    plotter.add_text("LH Lateral", position="upper_left", font_size=10, color="white")
-    plotter.add_mesh(lh_mesh, **mesh_args)
-    plotter.view_yz(negative=True) # View from Left
+    def _add_view(row, col, mesh, title, negative):
+        plotter.subplot(row, col)
+        plotter.add_text(title, position="upper_left", font_size=10, color="white")
+        plotter.add_mesh(mesh, **mesh_args)
+        plotter.reset_camera()
+        plotter.view_yz(negative=negative)
+        # Recompute clipping after each view so the linked cameras do not cut into the mesh.
+        plotter.reset_camera_clipping_range()
+
+    _add_view(0, 0, lh_mesh, "LH Lateral", True)
+    _add_view(0, 1, lh_mesh, "LH Medial", False)
+    _add_view(0, 2, rh_mesh, "RH Medial", True)
+    _add_view(0, 3, rh_mesh, "RH Lateral", False)
     
-    # 2. LH Medial
-    plotter.subplot(0, 1)
-    plotter.add_text("LH Medial", position="upper_left", font_size=10, color="white")
-    plotter.add_mesh(lh_mesh, **mesh_args)
-    plotter.view_yz(negative=False) # View from Right (shows medial for LH)
-    
-    # 3. RH Medial
-    plotter.subplot(0, 2)
-    plotter.add_text("RH Medial", position="upper_left", font_size=10, color="white")
-    plotter.add_mesh(rh_mesh, **mesh_args)
-    plotter.view_yz(negative=True) # View from Left (shows medial for RH)
-    
-    # 4. RH Lateral
-    plotter.subplot(0, 3)
-    plotter.add_text("RH Lateral", position="upper_left", font_size=10, color="white")
-    plotter.add_mesh(rh_mesh, **mesh_args)
-    plotter.view_yz(negative=False) # View from Right
-    
-    # Link all cameras
+    # Link all cameras and clamp the shared clipping range to keep both hemispheres visible.
     plotter.link_views()
+    plotter.subplot(0, 0)
+    plotter.reset_camera_clipping_range()
     
     print(f"Showing interactive plot for {atlas_name} ({space}) ...")
     plotter.show()
