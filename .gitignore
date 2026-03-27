@@ -5,3 +5,10 @@
 *.xml
 *.npz
 reg_prepost/.devcontainer/noop.txt
+*.asv
+*.png
+*.mat
+*.annot
+*.zip
+*.nii*
+*.h5
