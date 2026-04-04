@@ -7,8 +7,8 @@ and fsLR32k spaces containing the Untamed parcellations natively embedded as Sco
 
 These directories contain:
 1. `brainstormsubject.mat` - defines the anatomy protocol.
-2. `tess_cortex.mat` - contains the joined 3D cortical surfaces (Vertices, Faces) 
-   and all the Untamed Atlas structs natively embedded into the surface.
+2. `tess_cortex.mat` - contains the joined 3D cortical surfaces using the midthickness/mid-cortical 
+   geometry (Vertices, Faces) and all the Untamed Atlas structs natively embedded into the surface.
 
 Author: auto-generated
 """
@@ -31,7 +31,7 @@ LR32K_DIR = (
     "MNINonLinear/fsaverage_LR32k"
 )
 
-OUT_DIR = "/home/ajoshi/Projects/TR2preproc/dev/brainstorm_default_anatomies"
+OUT_DIR = "brainstorm_default_anatomies"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -40,16 +40,26 @@ def make_label_cmap(n_labels):
     base_colors = plt.cm.tab20.colors + plt.cm.tab20b.colors + plt.cm.tab20c.colors
     return np.array([base_colors[i % len(base_colors)] for i in range(n_labels + 1)])
 
-def load_fs6_surfaces():
-    lh_c, lh_f = nib.freesurfer.read_geometry(os.path.join(FS6_BASE_DIR, "surf", "lh.inflated"))
-    rh_c, rh_f = nib.freesurfer.read_geometry(os.path.join(FS6_BASE_DIR, "surf", "rh.inflated"))
+def load_fs6_midthickness():
+    # fsaverage6 often lacks a precomputed midthickness, so we average white and pial
+    lh_w_c, lh_w_f = nib.freesurfer.read_geometry(os.path.join(FS6_BASE_DIR, "surf", "lh.white"))
+    rh_w_c, rh_w_f = nib.freesurfer.read_geometry(os.path.join(FS6_BASE_DIR, "surf", "rh.white"))
+    lh_p_c, _ = nib.freesurfer.read_geometry(os.path.join(FS6_BASE_DIR, "surf", "lh.pial"))
+    rh_p_c, _ = nib.freesurfer.read_geometry(os.path.join(FS6_BASE_DIR, "surf", "rh.pial"))
+    
+    lh_c = (lh_w_c + lh_p_c) / 2.0
+    rh_c = (rh_w_c + rh_p_c) / 2.0
+    lh_f = lh_w_f
+    rh_f = rh_w_f
+    
     lh_idx = np.sort(nib.freesurfer.read_label(os.path.join(FS6_BASE_DIR, "label", "lh.cortex.label")))
     rh_idx = np.sort(nib.freesurfer.read_label(os.path.join(FS6_BASE_DIR, "label", "rh.cortex.label")))
     return lh_c, lh_f, rh_c, rh_f, lh_idx, rh_idx
 
-def load_32k_surfaces():
-    lh_gii = nib.load(os.path.join(LR32K_DIR, "Q1-Q6_RelatedParcellation210.L.inflated_MSMAll_2_d41_WRN_DeDrift.32k_fs_LR.surf.gii"))
-    rh_gii = nib.load(os.path.join(LR32K_DIR, "Q1-Q6_RelatedParcellation210.R.inflated_MSMAll_2_d41_WRN_DeDrift.32k_fs_LR.surf.gii"))
+def load_32k_midthickness():
+    tag = "midthickness_MSMAll_2_d41_WRN_DeDrift"
+    lh_gii = nib.load(os.path.join(LR32K_DIR, f"Q1-Q6_RelatedParcellation210.L.{tag}.32k_fs_LR.surf.gii"))
+    rh_gii = nib.load(os.path.join(LR32K_DIR, f"Q1-Q6_RelatedParcellation210.R.{tag}.32k_fs_LR.surf.gii"))
     lh_c, lh_f = lh_gii.darrays[0].data, lh_gii.darrays[1].data
     rh_c, rh_f = rh_gii.darrays[0].data, rh_gii.darrays[1].data
     
@@ -80,9 +90,6 @@ def build_anatomy(folder_name, lh_c, lh_f, rh_c, rh_f, lh_idx, rh_idx, atlases_d
     n_rh = rh_c.shape[0]
     
     # Scale surfaces to meters (0.001) for Brainstorm
-    # fsaverage6 inflated hemispheres natively overlap completely on the X axis [-41, 41].
-    # fsLR32k natives correctly span the full 130mm range.
-    # We explicitly shift fsaverage6 apart so it behaves geometrically like 32k.
     if "fsaverage6" in folder_name:
         lh_c = lh_c.copy()
         lh_c[:, 0] -= 45.0
@@ -92,16 +99,11 @@ def build_anatomy(folder_name, lh_c, lh_f, rh_c, rh_f, lh_idx, rh_idx, atlases_d
     vertices = np.vstack([lh_c, rh_c]) * 0.001
     
     # Brainstorm / MATLAB rendering uses the opposite face winding order 
-    # to FreeSurfer and GIFTI standard. We reverse the order [0, 2, 1]
-    # to flip the normals outward, fixing the "edge only" coloring bug.
-    
-    # LH Faces: 1-indexed for matlab, reversed winding
     faces_lh = lh_f[:, [0, 2, 1]] + 1
-    # RH Faces: 1-indexed AND shifted by n_lh, reversed winding
     faces_rh = rh_f[:, [0, 2, 1]] + 1 + n_lh
     faces = np.vstack([faces_lh, faces_rh])
     
-    # 2. Extract atlas scouts
+    # Extract atlas scouts
     atlas_dtype = [('Name', 'O'), ('Scouts', 'O')]
     scout_dtype = [('Vertices', 'O'), ('Seed', 'O'), ('Color', 'O'), ('Label', 'O'), ('Function', 'O'), ('Region', 'O'), ('Handles', 'O')]
     
@@ -152,7 +154,7 @@ def build_anatomy(folder_name, lh_c, lh_f, rh_c, rh_f, lh_idx, rh_idx, atlases_d
     # Write tess_cortex.mat
     tess_path = os.path.join(anatomy_dir, "tess_cortex.mat")
     tess_struct = {
-        'Comment': 'Cortex_Untamed',
+        'Comment': 'Cortex_midthickness_Untamed',
         'Vertices': vertices,
         'Faces': faces,
         'Atlas': all_atlases
@@ -177,29 +179,28 @@ def build_anatomy(folder_name, lh_c, lh_f, rh_c, rh_f, lh_idx, rh_idx, atlases_d
     
     print(f"  Saved Anatomy Template to {anatomy_dir}")
 
-
 def main():
-    print("Loading fsaverage6 surfaces...")
-    lh_c, lh_f, rh_c, rh_f, lh_i, rh_i = load_fs6_surfaces()
-    FS6 = {
+    FS6_ATLASES = {
         "L26R25"   : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L26R25.mat"),
         "L50R50"   : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L50R50.mat"),
         "L100R100" : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L100R100.mat"),
         "L180R180" : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L180R180.mat"),
         "L200R200" : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L200R200.mat"),
     }
-    build_anatomy("Untamed_fsaverage6", lh_c, lh_f, rh_c, rh_f, lh_i, rh_i, FS6)
+    print("Loading fsaverage6 midthickness surfaces (averaged from white & pial)...")
+    lh_c, lh_f, rh_c, rh_f, lh_i, rh_i = load_fs6_midthickness()
+    build_anatomy("Untamed_fsaverage6", lh_c, lh_f, rh_c, rh_f, lh_i, rh_i, FS6_ATLASES)
 
-    print("Loading fsLR32k surfaces...")
-    lh_c, lh_f, rh_c, rh_f, lh_i, rh_i = load_32k_surfaces()
-    LR32K = {
+    LR32K_ATLASES = {
         "L26R25"   : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L26R25.mat"),
         "L50R50"   : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L50R50.mat"),
         "L100R100" : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L100R100.mat"),
         "L180R180" : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L180R180.mat"),
         "L200R200" : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L200R200.mat"),
     }
-    build_anatomy("Untamed_fsLR32k", lh_c, lh_f, rh_c, rh_f, lh_i, rh_i, LR32K)
+    print("Loading fsLR32k midthickness surfaces...")
+    lh_c, lh_f, rh_c, rh_f, lh_i, rh_i = load_32k_midthickness()
+    build_anatomy("Untamed_fsLR32k", lh_c, lh_f, rh_c, rh_f, lh_i, rh_i, LR32K_ATLASES)
 
 if __name__ == "__main__":
     main()

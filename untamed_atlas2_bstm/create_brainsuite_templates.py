@@ -38,7 +38,7 @@ LR32K_DIR = (
 REF_CIFT_L = os.path.join(LR32K_DIR, "Q1-Q6_RelatedParcellation210.L.CorticalAreas_dil_Colors.32k_fs_LR.dlabel.nii")
 REF_CIFT_R = os.path.join(LR32K_DIR, "Q1-Q6_RelatedParcellation210.R.CorticalAreas_dil_Colors.32k_fs_LR.dlabel.nii")
 
-OUTPUT_DIR = "/home/ajoshi/Projects/TR2preproc/dev/brainsuite_templates"
+OUTPUT_DIR = "brainsuite_templates"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(os.path.join(OUTPUT_DIR, "fsaverage6"), exist_ok=True)
 os.makedirs(os.path.join(OUTPUT_DIR, "fsLR32k"), exist_ok=True)

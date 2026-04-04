@@ -4,12 +4,11 @@ plot_untamed_atlas_pyvista.py
 ----------------------------
 Plot the Untamed atlas parcellations using PyVista (interactive).
 
-Supports two surface spaces:
-  - fsaverage6  (FreeSurfer, ~40962 vertices per hemisphere)
-  - fs_LR 32k   (HCP CIFTI space, ~32492 vertices per hemisphere)
+It reads the standalone Brainstorm anatomies (`tess_cortex.mat`)
+directly instead of loading raw external surface files.
 
 Usage:
-    source .venv/bin/activate
+    source /home/ajoshi/Projects/USCCleveland/.venv/bin/activate
     python plot_untamed_atlas_pyvista.py
 
 Author: auto-generated
@@ -18,242 +17,166 @@ Author: auto-generated
 import os
 import numpy as np
 import scipy.io
-import nibabel as nib
 import pyvista as pv
-from matplotlib.colors import ListedColormap
-import matplotlib.pyplot as plt
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 
-ATLAS_DIR_FS6  = "/home/ajoshi/Downloads/24750117/fsaverage6"
-ATLAS_DIR_32K  = "/home/ajoshi/Downloads/24750117/fsLR_32K"
+# Point directly to the generated brainstorm default anatomies which embed the surfaces + scouts
+BST_ANATOMY_DIR = "brainstorm_default_anatomies"
 
-FS6_SURF_DIR   = "/home/ajoshi/Software/freesurfer_u22/subjects/fsaverage6/surf"
-FS6_LABEL_DIR  = "/home/ajoshi/Software/freesurfer_u22/subjects/fsaverage6/label"
-
-LR32K_DIR = (
-    "/home/ajoshi/Software/BrainSuite23a/svreg.new/USCBrainMulti/orig_atlas/"
-    "Glasser_et_al_2016_HCP_MMP1.0_RVVG/HCP_PhaseTwo/Q1-Q6_RelatedParcellation210/"
-    "MNINonLinear/fsaverage_LR32k"
-)
-
-# ─── Atlas files to visualise ──────────────────────────
-
-FS6_ATLASES = {
-    "L26R25"   : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L26R25.mat"),
-    "L50R50"   : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L50R50.mat"),
-    "L100R100" : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L100R100.mat"),
-    "L180R180" : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L180R180.mat"),
-    "L200R200" : os.path.join(ATLAS_DIR_FS6, "Untamed_fs6_L200R200.mat"),
-}
-
-LR32K_ATLASES = {
-    "L26R25"   : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L26R25.mat"),
-    "L50R50"   : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L50R50.mat"),
-    "L100R100" : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L100R100.mat"),
-    "L180R180" : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L180R180.mat"),
-    "L200R200" : os.path.join(ATLAS_DIR_32K, "Untamed_fsLR32K_L200R200.mat"),
-}
-
-# ─── Colourmap ─────────────────────────────────────────
-
-def make_label_cmap(n_labels):
-    """Return a categorical colormap for n_labels parcels."""
-    base_colors = plt.cm.tab20.colors + plt.cm.tab20b.colors + plt.cm.tab20c.colors
-    colors = [base_colors[i % len(base_colors)] for i in range(n_labels + 1)]
-    colors[0] = (0.15, 0.15, 0.15)  # label 0 → dark background
-    return ListedColormap(colors)
-
-# ─── Helpers: load surfaces ────────────────────────────────────────
-
-def load_fs6_surfaces(surf_type="inflated"):
-    """Returns (lh_coords, lh_faces, rh_coords, rh_faces) for fsaverage6."""
-    lh_coords, lh_faces = nib.freesurfer.read_geometry(
-        os.path.join(FS6_SURF_DIR, f"lh.{surf_type}")
-    )
-    rh_coords, rh_faces = nib.freesurfer.read_geometry(
-        os.path.join(FS6_SURF_DIR, f"rh.{surf_type}")
-    )
-    return lh_coords, lh_faces, rh_coords, rh_faces
-
-def load_fs6_cortex_mask():
-    lh_cortex = np.sort(nib.freesurfer.read_label(
-        os.path.join(FS6_LABEL_DIR, "lh.cortex.label")
-    ))
-    rh_cortex = np.sort(nib.freesurfer.read_label(
-        os.path.join(FS6_LABEL_DIR, "rh.cortex.label")
-    ))
-    return lh_cortex, rh_cortex
-
-def load_32k_surfaces(surf_type="inflated"):
-    type_map = {
-        "inflated"   : "inflated_MSMAll_2_d41_WRN_DeDrift",
-        "pial"       : "pial_MSMAll_2_d41_WRN_DeDrift",
-        "midthick"   : "midthickness_MSMAll_2_d41_WRN_DeDrift",
-        "veryinflated": "very_inflated_MSMAll_2_d41_WRN_DeDrift",
-    }
-    tag = type_map.get(surf_type, surf_type)
-    lh_gii = nib.load(os.path.join(
-        LR32K_DIR,
-        f"Q1-Q6_RelatedParcellation210.L.{tag}.32k_fs_LR.surf.gii"
-    ))
-    rh_gii = nib.load(os.path.join(
-        LR32K_DIR,
-        f"Q1-Q6_RelatedParcellation210.R.{tag}.32k_fs_LR.surf.gii"
-    ))
-    lh_coords = lh_gii.darrays[0].data
-    lh_faces  = lh_gii.darrays[1].data
-    rh_coords = rh_gii.darrays[0].data
-    rh_faces  = rh_gii.darrays[1].data
-    return lh_coords, lh_faces, rh_coords, rh_faces
-
-def load_32k_cortex_mask():
-    cifti_path = os.path.join(
-        LR32K_DIR,
-        "Q1-Q6_RelatedParcellation210.corrThickness_MSMAll_2_d41_WRN_DeDrift.32k_fs_LR.dscalar.nii"
-    )
-    cifti = nib.load(cifti_path)
-    lh_idx = None
-    rh_idx = None
-    for bm in cifti.header.get_index_map(1).brain_models:
-        if bm.brain_structure == "CIFTI_STRUCTURE_CORTEX_LEFT":
-            lh_idx = np.array(bm.vertex_indices)
-        elif bm.brain_structure == "CIFTI_STRUCTURE_CORTEX_RIGHT":
-            rh_idx = np.array(bm.vertex_indices)
-    return lh_idx, rh_idx
-
-# ─── Map atlas labels onto full surface vertex array ─────────────────────────
-
-def unpack_fs6_labels(label_flat, lh_cortex_idx, rh_cortex_idx, n_lh=40962, n_rh=40962):
-    n_lh_cortex = len(lh_cortex_idx)
-    lh_label_vec = np.zeros(n_lh, dtype=np.int32)
-    rh_label_vec = np.zeros(n_rh, dtype=np.int32)
-    lh_label_vec[lh_cortex_idx] = label_flat[:n_lh_cortex].astype(np.int32)
-    rh_label_vec[rh_cortex_idx] = label_flat[n_lh_cortex:].astype(np.int32)
-    return lh_label_vec, rh_label_vec
-
-def unpack_32k_labels(label_flat, lh_cortex_idx, rh_cortex_idx, n_lh=32492, n_rh=32492):
-    n_lh_cortex = len(lh_cortex_idx)
-    lh_label_vec = np.zeros(n_lh, dtype=np.int32)
-    rh_label_vec = np.zeros(n_rh, dtype=np.int32)
-    lh_label_vec[lh_cortex_idx] = label_flat[:n_lh_cortex].astype(np.int32)
-    rh_label_vec[rh_cortex_idx] = label_flat[n_lh_cortex:].astype(np.int32)
-    return lh_label_vec, rh_label_vec
+FS6_TESS_PATH = os.path.join(BST_ANATOMY_DIR, "Untamed_fsaverage6", "tess_cortex.mat")
+LR32K_TESS_PATH = os.path.join(BST_ANATOMY_DIR, "Untamed_fsLR32k", "tess_cortex.mat")
 
 # ─── PyVista Helpers ─────────────────────────────────────────────────────────
 
 def nib_to_pyvista(coords, faces):
-    """Convert nibabel geometry to pyvista PolyData."""
-    # Faces in nibabel are (N, 3), in pv they need [3, v1, v2, v3, 3, v4, v5, v6, ...]
+    """Convert nibabel/matlab geometry to pyvista PolyData."""
     pv_faces = np.column_stack((np.full(len(faces), 3), faces)).ravel()
     return pv.PolyData(coords, pv_faces)
 
 # ─── High-level plot function ─────────────────────────────────────────────────
 
-def plot_atlas_pyvista(atlas_name, space,
-                       lh_coords, lh_faces, rh_coords, rh_faces,
-                       lh_labels, rh_labels, n_parcels):
+def plot_atlas_pyvista_combined(atlas_name, space, coords, faces, point_colors):
     """
-    Create an interactive 4-view plot with PyVista.
+    Create an interactive 4-view plot with PyVista using a single combined mesh.
     """
-    cmap = make_label_cmap(n_parcels)
     
-    # Pre-compute cell labels for solid coloring (prevents boundary interpolation artifacts)
-    def compute_cell_labels(faces, point_labels):
-        v0 = point_labels[faces[:, 0]]
-        v1 = point_labels[faces[:, 1]]
-        v2 = point_labels[faces[:, 2]]
-        # Use majority vote across face vertices
-        return np.where(v0 == v1, v0, np.where(v0 == v2, v0, v1))
-
-    lh_cell_labels = compute_cell_labels(lh_faces, lh_labels)
-    rh_cell_labels = compute_cell_labels(rh_faces, rh_labels)
+    mesh = nib_to_pyvista(coords, faces)
     
-    lh_mesh = nib_to_pyvista(lh_coords, lh_faces)
-    lh_mesh.cell_data["labels"] = lh_cell_labels
+    # We assign RGB colors per vertex
+    # To avoid boundary interpolation issues, we can compute face colors 
+    # instead by taking the majority color or simply using point data.
+    # But since the user scout colors are identical across the face, point data is ok,
+    # except at boundaries. Let's convert point colors to cell colors to keep boundaries sharp.
     
-    rh_mesh = nib_to_pyvista(rh_coords, rh_faces)
-    rh_mesh.cell_data["labels"] = rh_cell_labels
+    face_v0 = point_colors[faces[:, 0]]
+    face_v1 = point_colors[faces[:, 1]]
+    face_v2 = point_colors[faces[:, 2]]
+    
+    # Majority vote per channel (since colors are shared by vertices of the same parcel)
+    # At boundaries, v0, v1, v2 might differ. This simple heuristic assigns 
+    # v0's color if it matches v1 or v2, else v1's color.
+    match_01 = np.all(face_v0 == face_v1, axis=1)
+    match_02 = np.all(face_v0 == face_v2, axis=1)
+    
+    cell_colors = np.where(match_01[:, None] | match_02[:, None], face_v0, face_v1)
+    
+    mesh.cell_data["colors"] = cell_colors
     
     plotter = pv.Plotter(shape=(1, 4), title=f"Untamed Atlas - {atlas_name} ({space})")
     plotter.set_background("black")
     
-    # Common plotting arguments
-    # Note: Using scalars="labels" with cell data ensures each face has a solid color.
-    mesh_args = dict(scalars="labels", cmap=cmap, show_scalar_bar=False, smooth_shading=True, clim=[0, n_parcels], preference="cell")
+    mesh_args = dict(scalars="colors", rgb=True, smooth_shading=True, preference="cell")
     
-    def _add_view(row, col, mesh, title, negative):
+    def _add_view(row, col, title, negative):
         plotter.subplot(row, col)
         plotter.add_text(title, position="upper_left", font_size=10, color="white")
         plotter.add_mesh(mesh, **mesh_args)
         plotter.reset_camera()
         plotter.view_yz(negative=negative)
-        # Recompute clipping after each view so the linked cameras do not cut into the mesh.
         plotter.reset_camera_clipping_range()
 
-    _add_view(0, 0, lh_mesh, "LH Lateral", True)
-    _add_view(0, 1, lh_mesh, "LH Medial", False)
-    _add_view(0, 2, rh_mesh, "RH Medial", True)
-    _add_view(0, 3, rh_mesh, "RH Lateral", False)
+    # The mesh is combined. The left hemisphere is at negative X usually? 
+    # For fsaverage6 we artificially shifted them. For 32k they are naturally separated.
+    # "negative=True" views from the left side (LH Lateral or RH Medial).
+    # Since they are separated, from Left side you see LH Lateral and RH Medial through the gap.
+    # From Right side you see RH Lateral and LH Medial through the gap.
     
-    # Link all cameras and clamp the shared clipping range to keep both hemispheres visible.
-    plotter.link_views()
-    plotter.subplot(0, 0)
+    _add_view(0, 0, "View Left", True)
+    _add_view(0, 1, "View Right", False)
+    
+    # Top and Bottom views for the remaining subplots
+    plotter.subplot(0, 2)
+    plotter.add_text("View Top", position="upper_left", font_size=10, color="white")
+    plotter.add_mesh(mesh, **mesh_args)
+    plotter.reset_camera()
+    plotter.view_xy(negative=False) # View from +Z
     plotter.reset_camera_clipping_range()
     
+    plotter.subplot(0, 3)
+    plotter.add_text("View Bottom", position="upper_left", font_size=10, color="white")
+    plotter.add_mesh(mesh, **mesh_args)
+    plotter.reset_camera()
+    plotter.view_xy(negative=True) # View from -Z
+    plotter.reset_camera_clipping_range()
+    
+    plotter.link_views()
     print(f"Showing interactive plot for {atlas_name} ({space}) ...")
     plotter.show()
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    # Allow user to pick which space to plot
     print("Which space would you like to plot?")
     print("  1. fsaverage6")
     print("  2. fs_LR 32k")
     choice = input("Enter choice (1 or 2): ")
     
     if choice == "1":
-        print("Loading fsaverage6 surfaces …")
-        lh_coords, lh_faces, rh_coords, rh_faces = load_fs6_surfaces("inflated")
-        lh_cortex_idx, rh_cortex_idx = load_fs6_cortex_mask()
-        atlases = FS6_ATLASES
+        mat_path = FS6_TESS_PATH
         space = "fsaverage6"
-        unpack_fn = unpack_fs6_labels
     elif choice == "2":
-        print("Loading fs_LR 32k surfaces …")
-        lh_coords, lh_faces, rh_coords, rh_faces = load_32k_surfaces("inflated")
-        lh_idx, rh_idx = load_32k_cortex_mask()
-        atlases = LR32K_ATLASES
+        mat_path = LR32K_TESS_PATH
         space = "fsLR32k"
-        unpack_fn = unpack_32k_labels
-        lh_cortex_idx, rh_cortex_idx = lh_idx, rh_idx
     else:
         print("Invalid choice. Exiting.")
         return
 
+    if not os.path.exists(mat_path):
+        print(f"Error: {mat_path} does not exist.")
+        print("Please run create_brainstorm_default_anatomy.py first.")
+        return
+
+    print(f"Loading {space} from {mat_path} …")
+    mat = scipy.io.loadmat(mat_path, simplify_cells=True)
+    
+    vertices = mat['Vertices']
+    faces = np.array(mat['Faces'], dtype=int) - 1 # 1-indexed to 0-indexed
+    
+    atlases = mat['Atlas']
+    # If there is only one atlas, scipy might not load it as a list
+    if not isinstance(atlases, (list, np.ndarray)):
+        atlases = [atlases]
+        
     print(f"\nAvailable {space} atlases:")
-    for i, name in enumerate(atlases.keys()):
-        print(f"  {i+1}. {name}")
+    for i, a in enumerate(atlases):
+        print(f"  {i+1}. {a['Name']}")
     
     atlas_choice = int(input(f"Pick an atlas (1-{len(atlases)}): ")) - 1
-    atlas_name = list(atlases.keys())[atlas_choice]
-    mat_path = atlases[atlas_name]
+    chosen_atlas = atlases[atlas_choice]
     
-    print(f"Loading {atlas_name} …")
-    d       = scipy.io.loadmat(mat_path)
-    labels  = d["label"].flatten()
-    n_parc  = int(labels.max())
+    print(f"Loading colors for {chosen_atlas['Name']} …")
     
-    lh_lbl, rh_lbl = unpack_fn(
-        labels, lh_cortex_idx, rh_cortex_idx,
-        n_lh=lh_coords.shape[0], n_rh=rh_coords.shape[0]
-    )
+    point_colors = np.zeros((len(vertices), 3))
+    # Default to a dark gray for medial wall / unlabeled
+    point_colors[:] = [0.15, 0.15, 0.15]
     
-    plot_atlas_pyvista(
-        atlas_name, space,
-        lh_coords, lh_faces, rh_coords, rh_faces,
-        lh_lbl, rh_lbl, n_parc,
+    scouts = chosen_atlas['Scouts']
+    # If there's only one scout, make it a list
+    if not isinstance(scouts, (list, np.ndarray)):
+        scouts = [scouts]
+        
+    for scout in scouts:
+        if 'Vertices' in scout:
+            # Check if Vertices is empty string or empty array
+            if isinstance(scout['Vertices'], str) and scout['Vertices'] == '[]':
+                continue
+            
+            # Substract 1 to adapt from 1-indexed Brainstorm vertices to 0-indexed
+            try:
+                verts = np.array(scout['Vertices'], dtype=int) - 1
+                point_colors[verts] = scout['Color']
+            except TypeError:
+                # If only a single vertex
+                v = int(scout['Vertices']) - 1
+                point_colors[v] = scout['Color']
+                
+    plot_atlas_pyvista_combined(
+        chosen_atlas['Name'], 
+        space,
+        vertices, 
+        faces, 
+        point_colors
     )
 
 if __name__ == "__main__":

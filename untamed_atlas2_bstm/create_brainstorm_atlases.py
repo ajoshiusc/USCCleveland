@@ -35,7 +35,7 @@ LR32K_DIR = (
     "MNINonLinear/fsaverage_LR32k"
 )
 
-OUTPUT_DIR = "/home/ajoshi/Projects/TR2preproc/dev/brainstorm_atlases"
+OUTPUT_DIR = "brainstorm_atlases"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 FS6_ATLASES = {
